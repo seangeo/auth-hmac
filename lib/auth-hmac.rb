@@ -1,8 +1,6 @@
 # Copyright (c) 2008 The Kaphan Foundation
 #
-# Possession of a copy of this file grants no permission or license
-# to use, modify, or create derivate works.
-# Please contact info@peerworks.org for further information.
+# See License.txt for licensing information.
 #
 
 $:.unshift(File.dirname(__FILE__)) unless
