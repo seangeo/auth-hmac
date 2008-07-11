@@ -51,6 +51,23 @@ class AuthHMAC
     request['Authorization'] = build_authorization_header(request, access_key_id, secret)
   end
   
+  # Authenticates a request using HMAC
+  #
+  # Returns true if the request has an AuthHMAC Authorization header and
+  # the access id and HMAC match an id and HMAC produced for the secret
+  # in the credential store. Otherwise returns false.
+  #
+  def authenticated?(request)
+    if md = /^AuthHMAC ([^:]+):(.+)$/.match(request['Authorization'])
+      access_key_id = md[1]
+      hmac = md[2]
+      secret = @credential_store[access_key_id]      
+      !secret.nil? && hmac == build_signature(request, secret)
+    else
+      false
+    end
+  end
+  
   private
     def build_authorization_header(request, access_key_id, secret)
       "AuthHMAC #{access_key_id}:#{build_signature(request, secret)}"      

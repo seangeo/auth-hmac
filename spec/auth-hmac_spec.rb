@@ -63,6 +63,48 @@ describe AuthHMAC do
     end
   end
   
+  describe "authenticated?" do
+    before(:each) do
+      @authhmac = AuthHMAC.new(YAML.load(File.read(File.join(File.dirname(__FILE__), 'fixtures', 'credentials.yml'))))
+      @request = Net::HTTP::Get.new("/path/to/get?foo=bar&bar=foo", 'date' => "Thu, 10 Jul 2008 03:29:56 GMT")
+    end
+    
+    it "should return false when there is no Authoization Header" do
+      @authhmac.authenticated?(@request).should be_false
+    end
+    
+    it "should return false when the Authorization value isn't prefixed with HMAC" do
+      @request['Authorization'] = "id:secret"
+      @authhmac.authenticated?(@request).should be_false
+    end
+    
+    it "should return false when the access key id can't be found" do
+      @request['Authorization'] = 'AuthHMAC missing-key:blah'
+      @authhmac.authenticated?(@request).should be_false
+    end    
+    
+    it "should return false when there is no hmac" do
+      @request['Authorization'] = 'AuthHMAC missing-key:'
+      @authhmac.authenticated?(@request).should be_false
+    end
+    
+    it "should return false when the hmac doesn't match" do
+      @request['Authorization'] = 'AuthHMAC access key 1:blah'
+      @authhmac.authenticated?(@request).should be_false
+    end
+    
+    it "should return false if the request was modified after signing" do
+      @authhmac.sign!(@request, 'access key 1')
+      @request.content_type = 'text/plain'
+      @authhmac.authenticated?(@request).should be_false
+    end
+    
+    it "should return true when the hmac does match" do
+      @authhmac.sign!(@request, 'access key 1')
+      @authhmac.authenticated?(@request).should be_true
+    end
+  end
+  
   describe "#sign! with YAML credentials" do
     before(:each) do
       @authhmac = AuthHMAC.new(YAML.load(File.read(File.join(File.dirname(__FILE__), 'fixtures', 'credentials.yml'))))
