@@ -21,6 +21,17 @@ require 'base64'
 #
 class AuthHMAC
   
+  # Signs a request using a given access key id and secret.
+  #
+  def AuthHMAC.sign!(request, access_key_id, secret)
+    self.new(access_key_id => secret).sign!(request, access_key_id)
+  end
+  
+  # Create an AuthHMAC instance using a given credential store.
+  #
+  # A credential store must respond to the [] method and return
+  # the secret for the access key id passed to [].
+  #
   def initialize(credential_store)
     @credential_store = credential_store
   end

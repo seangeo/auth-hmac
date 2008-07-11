@@ -4,6 +4,18 @@ require 'time'
 
 describe AuthHMAC do
   describe ".sign!" do
+    it "should sign using the key passed in as a parameter" do
+      date = "Thu, 10 Jul 2008 03:29:56 GMT"
+      request = Net::HTTP::Put.new("/path/to/put?foo=bar&bar=foo", 
+                                    'content-type' => 'text/plain', 
+                                    'content-md5' => 'blahblah', 
+                                    'date' => date)
+      AuthHMAC.sign!(request, "my-key-id", "secret")
+      request['Authorization'].should == "AuthHMAC my-key-id:71wAJM4IIu/3o6lcqx/tw7XnAJs="
+    end
+  end
+  
+  describe "#sign!" do
     before(:each) do
       @store = mock('store')
       @store.stub!(:[]).and_return("")
