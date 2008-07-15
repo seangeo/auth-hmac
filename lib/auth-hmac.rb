@@ -104,6 +104,11 @@ class AuthHMAC
   #                   Date         + "\n" +
   #                   request-uri;
   #
+  #
+  # If the Date header doesn't exist, one will be generated since
+  # Net/HTTP will generate one if it doesn't exist and it will be
+  # used on the server side to do authentication.
+  #
   class CanonicalString < String
     include Headers
     
@@ -127,7 +132,7 @@ class AuthHMAC
       def header_values(headers)
         [ headers['content-type'], 
           headers['content-md5'], 
-          headers['date']
+          (headers['date'] or Time.now.getutc.httpdate)
         ].join("\n")
       end
       
