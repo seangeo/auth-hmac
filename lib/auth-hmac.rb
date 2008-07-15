@@ -18,6 +18,24 @@ require 'base64'
 # the Amazon extension headers.
 #
 class AuthHMAC
+  module Headers
+    # Gets the headers for a request.
+    #
+    # Attempts to deal with known HTTP header representations in Ruby.
+    # Currently handles net/http and Rails.
+    #
+    def headers(request)
+      if request.respond_to?(:[])
+        request
+      elsif request.respond_to?(:headers)
+        request.headers
+      else
+        raise ArgumentError, "Don't know how to get the headers from #{request.inspect}"
+      end
+    end
+  end
+  
+  include Headers
   
   # Signs a request using a given access key id and secret.
   #
@@ -56,7 +74,7 @@ class AuthHMAC
   # in the credential store. Otherwise returns false.
   #
   def authenticated?(request)
-    if md = /^AuthHMAC ([^:]+):(.+)$/.match(request['Authorization'])
+    if md = /^AuthHMAC ([^:]+):(.+)$/.match(headers(request)['Authorization'])
       access_key_id = md[1]
       hmac = md[2]
       secret = @credential_store[access_key_id]      
@@ -87,22 +105,88 @@ class AuthHMAC
   #                   request-uri;
   #
   class CanonicalString < String
+    include Headers
+    
     def initialize(request)
-      self << request.method + "\n"
-      self << header_values(request) + "\n"
+      self << request_method(request) + "\n"
+      self << header_values(headers(request)) + "\n"
       self << request_path(request)
     end
     
     private
-      def header_values(request)
-        [ request.content_type, 
-          request['content-md5'], 
-          request['date']
+      def request_method(request)
+        if request.method.is_a?(String)
+          request.method
+        elsif request.env
+          request.env['REQUEST_METHOD']
+        else
+          raise ArgumentError, "Don't know how to get the request method from #{request.inspect}"
+        end
+      end
+      
+      def header_values(headers)
+        [ headers['content-type'], 
+          headers['content-md5'], 
+          headers['date']
         ].join("\n")
       end
+      
+      
       
       def request_path(request)
         request.path[/^[^?]*/]
       end
+  end
+    
+  class Rails
+    module ControllerFilter
+      module ClassMethods
+        # Call within a Rails Controller to initialize HMAC authentication for the controller.
+        #
+        #  * +credentials+ must be a hash that indexes secrets by their access key id.
+        #  * +options+ supports the following arguments:
+        #       * +failure_message+: The text to use when authentication fails.
+        #       * +only+: A list off actions to protect.
+        #       * +except: A list of actions to not protect.
+        #
+        def with_auth_hmac(credentials, options = {})
+          self.credentials = credentials
+          self.authhmac = AuthHMAC.new(self.credentials)
+          self.authhmac_failure_message = (options.delete(:failure_message) or "HMAC Authentication failed")
+          before_filter(:hmac_login_required, options)
+        end
+      end
+      
+      module InstanceMethods
+        def hmac_login_required          
+          unless self.class.authhmac.authenticated?(request)
+            render :text => self.class.authhmac_failure_message, :status => :forbidden
+          end
+        end
+      end
+      
+      unless defined?(ActionController)
+        begin
+          require 'rubygems'
+          gem 'actionpack'
+          gem 'activesupport'
+          require 'action_controller'
+          require 'active_support'
+        rescue
+          nil
+        end
+      end
+      
+      if defined?(ActionController::Base)        
+        ActionController::Base.class_eval do
+          class_inheritable_accessor :authhmac
+          class_inheritable_accessor :credentials
+          class_inheritable_accessor :authhmac_failure_message
+        end
+        
+        ActionController::Base.send(:include, ControllerFilter::InstanceMethods)
+        ActionController::Base.extend(ControllerFilter::ClassMethods)
+      end
+    end
   end
 end
