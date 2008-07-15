@@ -138,6 +138,8 @@ class AuthHMAC
       end
   end
     
+  # Integration with Rails
+  #
   class Rails
     module ControllerFilter
       module ClassMethods
@@ -187,6 +189,75 @@ class AuthHMAC
         ActionController::Base.send(:include, ControllerFilter::InstanceMethods)
         ActionController::Base.extend(ControllerFilter::ClassMethods)
       end
+    end
+    
+    module ActiveResourceExtension  
+      module BaseHmac
+        def self.included(base)
+          base.extend(ClassMethods)
+          
+          base.class_inheritable_accessor :hmac_access_id
+          base.class_inheritable_accessor :hmac_secret
+          base.class_inheritable_accessor :use_hmac
+        end
+        
+        module ClassMethods
+          def with_auth_hmac(access_id, secret)
+            self.hmac_access_id = access_id
+            self.hmac_secret = secret
+            self.use_hmac = true
+            
+            class << self
+              alias_method_chain :connection, :hmac
+            end
+          end
+          
+          def connection_with_hmac
+            c = connection_without_hmac
+            c.hmac_access_id = self.hmac_access_id
+            c.hmac_secret = self.hmac_secret
+            c.use_hmac = self.use_hmac
+            c
+          end          
+        end
+        
+        module InstanceMethods
+        end
+      end
+      
+      module Connection
+        def self.included(base)
+          base.send :alias_method_chain, :request, :hmac
+          base.class_eval do
+            attr_accessor :hmac_secret, :hmac_access_id, :use_hmac
+          end
+        end
+
+        def request_with_hmac(method, path, *arguments)
+          if use_hmac && hmac_access_id && hmac_secret
+            temp = "Net::HTTP::#{method.to_s.capitalize}".constantize.new(path, arguments.last)
+            AuthHMAC.sign!(temp, hmac_access_id, hmac_secret)
+            arguments.last['Authorization'] = temp['Authorization']
+          end
+          
+          request_without_hmac(method, path, *arguments)
+        end
+      end
+            
+      unless defined?(ActiveResource)
+        begin
+          require 'rubygems'
+          gem 'activeresource'
+          require 'activeresource'
+        rescue
+          nil
+        end
+      end
+      
+      if defined?(ActiveResource)
+        ActiveResource::Base.send(:include, BaseHmac)        
+        ActiveResource::Connection.send(:include, Connection)
+      end     
     end
   end
 end

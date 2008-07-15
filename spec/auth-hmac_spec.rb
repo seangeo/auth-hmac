@@ -4,8 +4,11 @@ require 'time'
 require 'yaml'
 require 'rubygems'
 gem 'actionpack'
+gem 'activeresource'
 require 'action_controller'
 require 'action_controller/test_process'
+require 'active_resource'
+require 'active_resource/http_mock'
 
 describe AuthHMAC do
   describe ".sign!" do
@@ -270,6 +273,23 @@ describe AuthHMAC do
       request = ActionController::TestRequest.new
       request.action = 'public'
       MessageTestController.new.process(request, ActionController::TestResponse.new).code.should == "200"
+    end
+  end
+  
+  describe AuthHMAC::Rails::ActiveResourceExtension do
+    class TestResource < ActiveResource::Base
+      with_auth_hmac("access_id", "secret")
+      self.site = "http://localhost/"
+    end
+        
+    it "should send requests using HMAC authentication" do
+      ActiveResource::HttpMock.respond_to do |mock|
+        mock.get "/test_resources/1.xml", 
+                    {'Authorization' => 'AuthHMAC access_id:QcgEZdhT75OWoDfrR3nxdKM2t+I=', 'Content-Type' => 'application/xml'},
+                    {:id => "1"}.to_xml(:root => 'test_resource')
+      end
+      
+      TestResource.find(1)
     end
   end
 end
