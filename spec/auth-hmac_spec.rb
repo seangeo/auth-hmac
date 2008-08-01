@@ -283,10 +283,12 @@ describe AuthHMAC do
       self.site = "http://localhost/"
     end
         
-    xit "should send requests using HMAC authentication" do
+    it "should send requests using HMAC authentication" do
+      now = Time.parse("Thu, 10 Jul 2008 03:29:56 GMT")
+      Time.should_receive(:now).at_least(1).and_return(now)
       ActiveResource::HttpMock.respond_to do |mock|
         mock.get "/test_resources/1.xml", 
-                    {'Authorization' => 'AuthHMAC access_id:QcgEZdhT75OWoDfrR3nxdKM2t+I=', 'Content-Type' => 'application/xml'},
+                    {'Authorization' => 'AuthHMAC access_id:n8UlshMa8ve66U36XD3ZCbAIctg=', 'Content-Type' => 'application/xml'},
                     {:id => "1"}.to_xml(:root => 'test_resource')
       end
       
