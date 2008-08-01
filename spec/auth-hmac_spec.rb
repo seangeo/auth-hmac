@@ -231,7 +231,7 @@ describe AuthHMAC do
     it "should allow a request with the proper hmac" do
       request = ActionController::TestRequest.new
       request.env['Authorization'] = "AuthHMAC access key 1:6BVEVfAyIDoI3K+WallRMnDxROQ="
-      request.env['date'] = "Thu, 10 Jul 2008 03:29:56 GMT"
+      request.env['DATE'] = "Thu, 10 Jul 2008 03:29:56 GMT"
       request.action = 'index'
       request.path = "/index"
       TestController.new.process(request, ActionController::TestResponse.new).code.should == "200"

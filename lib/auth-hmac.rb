@@ -33,6 +33,12 @@ class AuthHMAC
         raise ArgumentError, "Don't know how to get the headers from #{request.inspect}"
       end
     end
+    
+    def find_header(keys, headers)
+      keys.map do |key|
+        headers[key]
+      end.compact.first
+    end
   end
   
   include Headers
@@ -74,7 +80,7 @@ class AuthHMAC
   # in the credential store. Otherwise returns false.
   #
   def authenticated?(request)
-    if md = /^AuthHMAC ([^:]+):(.+)$/.match(headers(request)['Authorization'])
+    if md = /^AuthHMAC ([^:]+):(.+)$/.match(find_header(%w(Authorization HTTP_AUTHORIZATION), headers(request)))
       access_key_id = md[1]
       hmac = md[2]
       secret = @credential_store[access_key_id]      
@@ -90,8 +96,9 @@ class AuthHMAC
     end
     
     def build_signature(request, secret)
+      canonical_string = CanonicalString.new(request)
       digest = OpenSSL::Digest::Digest.new('sha1')
-      Base64.encode64(OpenSSL::HMAC.digest(digest, secret, CanonicalString.new(request))).strip
+      Base64.encode64(OpenSSL::HMAC.digest(digest, secret, canonical_string)).strip
     end
   
   # Build a Canonical String for a HTTP request.
@@ -130,13 +137,23 @@ class AuthHMAC
       end
       
       def header_values(headers)
-        [ headers['content-type'], 
-          headers['content-md5'], 
-          (headers['date'] or Time.now.getutc.httpdate)
+        [ content_type(headers),
+          content_md5(headers),
+          (date(headers) or Time.now.getutc.httpdate)
         ].join("\n")
       end
       
+      def content_type(headers)
+        find_header(%w(CONTENT-TYPE CONTENT_TYPE HTTP_CONTENT_TYPE), headers)
+      end
       
+      def date(headers)
+        find_header(%w(DATE HTTP_DATE), headers)
+      end
+      
+      def content_md5(headers)
+        find_header(%w(CONTENT-MD5 CONTENT_MD5), headers)
+      end
       
       def request_path(request)
         request.path[/^[^?]*/]
@@ -157,18 +174,26 @@ class AuthHMAC
         #       * +except: A list of actions to not protect.
         #
         def with_auth_hmac(credentials, options = {})
-          self.credentials = credentials
-          self.authhmac = AuthHMAC.new(self.credentials)
-          self.authhmac_failure_message = (options.delete(:failure_message) or "HMAC Authentication failed")
-          before_filter(:hmac_login_required, options)
+          unless credentials.nil?
+            self.credentials = credentials
+            self.authhmac = AuthHMAC.new(self.credentials)
+            self.authhmac_failure_message = (options.delete(:failure_message) or "HMAC Authentication failed")
+            before_filter(:hmac_login_required, options)
+          else
+            $stderr << "with_auth_hmac called with nil credentials - authentication will be skipped\n"
+          end
         end
       end
       
       module InstanceMethods
         def hmac_login_required          
-          unless self.class.authhmac.authenticated?(request)
+          unless hmac_authenticated?
             render :text => self.class.authhmac_failure_message, :status => :forbidden
           end
+        end
+        
+        def hmac_authenticated?
+          self.class.authhmac.authenticated?(request)
         end
       end
       
