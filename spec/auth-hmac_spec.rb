@@ -240,14 +240,21 @@ describe AuthHMAC do
     it "should reject a request with no hmac" do
       request = ActionController::TestRequest.new
       request.action = 'index'
-      TestController.new.process(request, ActionController::TestResponse.new).code.should == "403"
+      TestController.new.process(request, ActionController::TestResponse.new).code.should == "401"
     end
     
     it "should reject a request with the wrong hmac" do
       request = ActionController::TestRequest.new
       request.action = 'index'
       request.env['Authorization'] = "AuthHMAC bogus:bogus"
-      TestController.new.process(request, ActionController::TestResponse.new).code.should == "403"
+      TestController.new.process(request, ActionController::TestResponse.new).code.should == "401"
+    end
+    
+    it "should include a WWW-Authenticate header with the schema AuthHMAC" do
+      request = ActionController::TestRequest.new
+      request.action = 'index'
+      request.env['Authorization'] = "AuthHMAC bogus:bogus"
+      TestController.new.process(request, ActionController::TestResponse.new).headers['WWW-Authenticate'].should == "AuthHMAC"
     end
     
     it "should include a default error message" do

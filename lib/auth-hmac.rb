@@ -188,7 +188,8 @@ class AuthHMAC
       module InstanceMethods
         def hmac_login_required          
           unless hmac_authenticated?
-            render :text => self.class.authhmac_failure_message, :status => :forbidden
+            response.headers['WWW-Authenticate'] = 'AuthHMAC'
+            render :text => self.class.authhmac_failure_message, :status => :unauthorized
           end
         end
         
@@ -232,9 +233,14 @@ class AuthHMAC
         end
         
         module ClassMethods
-          def with_auth_hmac(access_id, secret)
-            self.hmac_access_id = access_id
-            self.hmac_secret = secret
+          def with_auth_hmac(access_id, secret = nil)
+            if access_id.is_a?(Hash)
+              self.hmac_access_id = access_id.keys.first
+              self.hmac_secret = access_id[self.hmac_access_id]
+            else
+              self.hmac_access_id = access_id
+              self.hmac_secret = secret
+            end
             self.use_hmac = true
             
             class << self
@@ -242,8 +248,8 @@ class AuthHMAC
             end
           end
           
-          def connection_with_hmac
-            c = connection_without_hmac
+          def connection_with_hmac(refresh = false)
+            c = connection_without_hmac(refresh)
             c.hmac_access_id = self.hmac_access_id
             c.hmac_secret = self.hmac_secret
             c.use_hmac = self.use_hmac
