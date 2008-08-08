@@ -127,9 +127,11 @@ class AuthHMAC
     
     private
       def request_method(request)
-        if request.method.is_a?(String)
+        if request.respond_to?(:request_method) && request.request_method.is_a?(String)
+          request.request_method
+        elsif request.respond_to?(:method) && request.method.is_a?(String)
           request.method
-        elsif request.env
+        elsif request.respond_to?(:env) && request.env
           request.env['REQUEST_METHOD']
         else
           raise ArgumentError, "Don't know how to get the request method from #{request.inspect}"
@@ -139,7 +141,7 @@ class AuthHMAC
       def header_values(headers)
         [ content_type(headers),
           content_md5(headers),
-          (date(headers) or Time.now.getutc.httpdate)
+          (date(headers) or headers['Date'] = Time.now.getutc.httpdate)
         ].join("\n")
       end
       
