@@ -273,6 +273,7 @@ class AuthHMAC
 
         def request_with_hmac(method, path, *arguments)
           if use_hmac && hmac_access_id && hmac_secret
+            arguments.last['Date'] = Time.now.httpdate if arguments.last['Date'].nil?
             temp = "Net::HTTP::#{method.to_s.capitalize}".constantize.new(path, arguments.last)
             AuthHMAC.sign!(temp, hmac_access_id, hmac_secret)
             arguments.last['Authorization'] = temp['Authorization']

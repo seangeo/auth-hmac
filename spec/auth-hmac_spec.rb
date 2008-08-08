@@ -295,7 +295,7 @@ describe AuthHMAC do
       Time.should_receive(:now).at_least(1).and_return(now)
       ActiveResource::HttpMock.respond_to do |mock|
         mock.get "/test_resources/1.xml", 
-                    {'Authorization' => 'AuthHMAC access_id:n8UlshMa8ve66U36XD3ZCbAIctg=', 'Content-Type' => 'application/xml'},
+                    {'Authorization' => 'AuthHMAC access_id:n8UlshMa8ve66U36XD3ZCbAIctg=', 'Content-Type' => 'application/xml', 'Date' => "Thu, 10 Jul 2008 03:29:56 GMT" },
                     {:id => "1"}.to_xml(:root => 'test_resource')
       end
       
