@@ -18,7 +18,7 @@ require 'base64'
 # the Amazon extension headers.
 #
 class AuthHMAC
-  module Headers
+  module Headers # :nodoc:
     # Gets the headers for a request.
     #
     # Attempts to deal with known HTTP header representations in Ruby.
@@ -47,6 +47,10 @@ class AuthHMAC
   #
   def AuthHMAC.sign!(request, access_key_id, secret)
     self.new(access_key_id => secret).sign!(request, access_key_id)
+  end
+  
+  def AuthHMAC.authenticated?(request, access_key_id, secret)
+    self.new(access_key_id => secret).authenticated?(request)
   end
   
   # Create an AuthHMAC instance using a given credential store.
@@ -116,7 +120,7 @@ class AuthHMAC
   # Net/HTTP will generate one if it doesn't exist and it will be
   # used on the server side to do authentication.
   #
-  class CanonicalString < String
+  class CanonicalString < String # :nodoc:
     include Headers
     
     def initialize(request)
@@ -171,16 +175,16 @@ class AuthHMAC
     
   # Integration with Rails
   #
-  class Rails
-    module ControllerFilter
+  class Rails # :nodoc:
+    module ControllerFilter # :nodoc:
       module ClassMethods
         # Call within a Rails Controller to initialize HMAC authentication for the controller.
         #
-        #  * +credentials+ must be a hash that indexes secrets by their access key id.
-        #  * +options+ supports the following arguments:
-        #       * +failure_message+: The text to use when authentication fails.
-        #       * +only+: A list off actions to protect.
-        #       * +except: A list of actions to not protect.
+        # * +credentials+ must be a hash that indexes secrets by their access key id.
+        # * +options+ supports the following arguments:
+        #   * +failure_message+: The text to use when authentication fails.
+        #   * +only+: A list off actions to protect.
+        #   * +except+: A list of actions to not protect.
         #
         def with_auth_hmac(credentials, options = {})
           unless credentials.nil?
@@ -194,7 +198,7 @@ class AuthHMAC
         end
       end
       
-      module InstanceMethods
+      module InstanceMethods # :nodoc:
         def hmac_login_required          
           unless hmac_authenticated?
             response.headers['WWW-Authenticate'] = 'AuthHMAC'
@@ -231,8 +235,8 @@ class AuthHMAC
       end
     end
     
-    module ActiveResourceExtension  
-      module BaseHmac
+    module ActiveResourceExtension  # :nodoc:
+      module BaseHmac # :nodoc:
         def self.included(base)
           base.extend(ClassMethods)
           
@@ -242,6 +246,28 @@ class AuthHMAC
         end
         
         module ClassMethods
+          # Call with an Active Resource class definition to sign
+          # all HTTP requests sent by that class with the provided
+          # credentials.
+          #
+          # Can be called with either a hash or two separate parameters
+          # like so:
+          #
+          #   class MyResource < ActiveResource::Base
+          #     with_auth_hmac("my_access_id", "my_secret")
+          #   end
+          # 
+          # or
+          #
+          #   class MyOtherResource < ActiveResource::Base
+          #     with_auth_hmac("my_access_id" => "my_secret")
+          #   end
+          #
+          #
+          # This has only been tested with Rails 2.1 and since it is virtually a monkey
+          # patch of the internals of ActiveResource it might not work with past or
+          # future versions.
+          #
           def with_auth_hmac(access_id, secret = nil)
             if access_id.is_a?(Hash)
               self.hmac_access_id = access_id.keys.first
@@ -257,7 +283,7 @@ class AuthHMAC
             end
           end
           
-          def connection_with_hmac(refresh = false)
+          def connection_with_hmac(refresh = false) # :nodoc: 
             c = connection_without_hmac(refresh)
             c.hmac_access_id = self.hmac_access_id
             c.hmac_secret = self.hmac_secret
@@ -266,11 +292,11 @@ class AuthHMAC
           end          
         end
         
-        module InstanceMethods
+        module InstanceMethods # :nodoc:
         end
       end
       
-      module Connection
+      module Connection # :nodoc:
         def self.included(base)
           base.send :alias_method_chain, :request, :hmac
           base.class_eval do
