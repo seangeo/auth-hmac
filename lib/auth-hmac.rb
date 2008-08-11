@@ -158,7 +158,14 @@ class AuthHMAC
       end
       
       def request_path(request)
-        request.path[/^[^?]*/]
+        # Try unparsed_uri in case it is a Webrick request
+        path = if request.respond_to?(:unparsed_uri)
+          request.unparsed_uri
+        else
+          request.path
+        end
+        
+        path[/^[^?]*/]
       end
   end
     
