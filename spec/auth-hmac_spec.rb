@@ -228,6 +228,35 @@ describe AuthHMAC do
       def rescue_action(e) raise(e) end
     end
     
+    class NilCredentialsController < ActionController::Base
+      with_auth_hmac nil
+      before_filter :force_auth
+      
+      def index
+        render :nothing => true, :status => :ok
+      end
+      
+      def public
+        render :nothing => true, :status => :ok
+      end
+      
+      def rescue_action(e) raise(e) end
+        
+      private
+      def force_auth
+        hmac_authenticated?
+      end
+    end
+    
+    it "should not raise an error when credentials are nil" do
+      request = ActionController::TestRequest.new
+      request.action = 'index'
+      request.path = "/index"
+      lambda do
+        NilCredentialsController.new.process(request, ActionController::TestResponse.new).code.should == "200"
+      end.should_not raise_error
+    end
+    
     it "should allow a request with the proper hmac" do
       request = ActionController::TestRequest.new
       request.env['Authorization'] = "AuthHMAC access key 1:6BVEVfAyIDoI3K+WallRMnDxROQ="

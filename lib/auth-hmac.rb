@@ -207,7 +207,7 @@ class AuthHMAC
         end
         
         def hmac_authenticated?
-          self.class.authhmac.authenticated?(request)
+          self.class.authhmac.nil? ? true : self.class.authhmac.authenticated?(request)
         end
       end
       

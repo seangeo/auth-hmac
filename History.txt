@@ -1,3 +1,7 @@
-== 1.0.1 2008-08-11
+== 1.0.1 2008-08-22
+
+* Fixed nil pointer exception when with_auth called with nil creds.
+
+== 1.0.0 2008-08-11
 
 * Initial release
