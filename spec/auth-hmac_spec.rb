@@ -10,6 +10,13 @@ require 'action_controller/test_process'
 require 'active_resource'
 require 'active_resource/http_mock'
 
+# Class for doing a custom signature
+class CustomSignature < String
+  def initialize(request)
+    self << "Custom signature string: #{request.method}"
+  end
+end
+
 describe AuthHMAC do
   describe ".sign!" do
     it "should sign using the key passed in as a parameter" do
@@ -20,6 +27,28 @@ describe AuthHMAC do
       AuthHMAC.sign!(request, "my-key-id", "secret")
       request['Authorization'].should == "AuthHMAC my-key-id:71wAJM4IIu/3o6lcqx/tw7XnAJs="
     end
+
+    it "should sign using custom service id" do
+      request = Net::HTTP::Put.new("/path/to/put?foo=bar&bar=foo", 
+                                    'content-type' => 'text/plain', 
+                                    'content-md5' => 'blahblah', 
+                                    'date' => "Thu, 10 Jul 2008 03:29:56 GMT")
+      AuthHMAC.sign!(request, "my-key-id", "secret", { :service_id => 'MyService' })
+      request['Authorization'].should == "MyService my-key-id:71wAJM4IIu/3o6lcqx/tw7XnAJs="
+    end
+
+    it "should sign using custom signature method" do
+      request = Net::HTTP::Put.new("/path/to/put?foo=bar&bar=foo", 
+                                    'content-type' => 'text/plain', 
+                                    'content-md5' => 'blahblah', 
+                                    'date' => "Thu, 10 Jul 2008 03:29:56 GMT")
+      options = {
+        :service_id => 'MyService',
+        :signature_method => lambda { |r| CustomSignature.new(r) }
+      }
+      AuthHMAC.sign!(request, "my-key-id", "secret", options)
+      request['Authorization'].should == "MyService my-key-id:/L4N1v1BZSHfAYkQjsvZn696D9c="
+    end
   end
   
   describe "#sign!" do
@@ -28,45 +57,73 @@ describe AuthHMAC do
       @store.stub!(:[]).and_return("")
       @authhmac = AuthHMAC.new(@store)
     end
-    
-    it "should add an Authorization header" do
-      request = Net::HTTP::Get.new("/")
-      @authhmac.sign!(request, 'key-id')
-      request.key?("Authorization").should be_true
+
+    describe "default AuthHMAC with CanonicalString signature" do
+      it "should add an Authorization header" do
+        request = Net::HTTP::Get.new("/")
+        @authhmac.sign!(request, 'key-id')
+        request.key?("Authorization").should be_true
+      end
+      
+      it "should fetch the secret from the store" do
+        request = Net::HTTP::Get.new("/")
+        @store.should_receive(:[]).with('key-id').and_return('secret')
+        @authhmac.sign!(request, 'key-id')
+      end
+      
+      it "should prefix the Authorization Header with AuthHMAC" do
+        request = Net::HTTP::Get.new("/")
+        @authhmac.sign!(request, 'key-id')
+        request['Authorization'].should match(/^AuthHMAC /)
+      end
+
+      it "should include the key id as the first part of the Authorization header value" do
+        request = Net::HTTP::Get.new("/")
+        @authhmac.sign!(request, 'key-id')
+        request['Authorization'].should match(/^AuthHMAC key-id:/)
+      end
+      
+      it "should include the base64 encoded HMAC signature as the last part of the header value" do
+        request = Net::HTTP::Get.new("/path")
+        @authhmac.sign!(request, 'key-id')
+        request['Authorization'].should match(/:[A-Za-z0-9+\/]{26,28}[=]{0,2}$/)
+      end
+      
+      it "should create a complete signature" do
+        @store.should_receive(:[]).with('my-key-id').and_return('secret')
+        request = Net::HTTP::Put.new("/path/to/put?foo=bar&bar=foo", 
+                                      'content-type' => 'text/plain', 
+                                      'content-md5' => 'blahblah', 
+                                      'date' => "Thu, 10 Jul 2008 03:29:56 GMT")
+        @authhmac.sign!(request, "my-key-id")
+        request['Authorization'].should == "AuthHMAC my-key-id:71wAJM4IIu/3o6lcqx/tw7XnAJs="
+      end
     end
-    
-    it "should fetch the secret from the store" do
-      request = Net::HTTP::Get.new("/")
-      @store.should_receive(:[]).with('key-id').and_return('secret')
-      @authhmac.sign!(request, 'key-id')
-    end
-    
-    it "should prefix the Authorization Header with AuthHMAC" do
-      request = Net::HTTP::Get.new("/")
-      @authhmac.sign!(request, 'key-id')
-      request['Authorization'].should match(/^AuthHMAC /)
-    end
-    
-    it "should include the key id as the first part of the Authorization header value" do
-      request = Net::HTTP::Get.new("/")
-      @authhmac.sign!(request, 'key-id')
-      request['Authorization'].should match(/^AuthHMAC key-id:/)
-    end
-    
-    it "should include the base64 encoded HMAC signature as the last part of the header value" do
-      request = Net::HTTP::Get.new("/path")
-      @authhmac.sign!(request, 'key-id')
-      request['Authorization'].should match(/:[A-Za-z0-9+\/]{26,28}[=]{0,2}$/)
-    end
-    
-    it "should create a complete signature" do
-      @store.should_receive(:[]).with('my-key-id').and_return('secret')
-      request = Net::HTTP::Put.new("/path/to/put?foo=bar&bar=foo", 
-                                    'content-type' => 'text/plain', 
-                                    'content-md5' => 'blahblah', 
-                                    'date' => "Thu, 10 Jul 2008 03:29:56 GMT")
-      @authhmac.sign!(request, "my-key-id")
-      request['Authorization'].should == "AuthHMAC my-key-id:71wAJM4IIu/3o6lcqx/tw7XnAJs="
+
+    describe "custom signatures" do
+      before(:each) do
+        @options = {
+          :service_id => 'MyService',
+          :signature_method => lambda { |r| CustomSignature.new(r) }
+        }
+        @authhmac = AuthHMAC.new(@store, @options)
+      end
+
+      it "should prefix the Authorization header with custom service id" do
+        request = Net::HTTP::Get.new("/")
+        @authhmac.sign!(request, 'key-id')
+        request['Authorization'].should match(/^MyService /)
+      end
+      
+      it "should create a complete signature using options" do
+        @store.should_receive(:[]).with('my-key-id').and_return('secret')
+        request = Net::HTTP::Put.new("/path/to/put?foo=bar&bar=foo", 
+                                      'content-type' => 'text/plain', 
+                                      'content-md5' => 'blahblah', 
+                                      'date' => "Thu, 10 Jul 2008 03:29:56 GMT")
+        @authhmac.sign!(request, "my-key-id")
+        request['Authorization'].should == "MyService my-key-id:/L4N1v1BZSHfAYkQjsvZn696D9c="
+      end
     end
   end
   

@@ -43,6 +43,8 @@ class AuthHMAC
   
   include Headers
 
+  @@default_signature_method = lambda { |r| CanonicalString.new(r) }
+
   # Create an AuthHMAC instance using the given credential store
   #
   # Credential Store:
@@ -62,19 +64,32 @@ class AuthHMAC
   #   
   def initialize(credential_store, options = nil)
     @credential_store = credential_store
+
+    # Defaults
     @service_id = self.class.name
-    @signature_method = lambda { |r| CanonicalString.new(r) }
+    @signature_method = @@default_signature_method
+
     parse_options(options)
   end
 
   # Signs a request using a given access key id and secret.
   #
-  def AuthHMAC.sign!(request, access_key_id, secret)
-    self.new(access_key_id => secret).sign!(request, access_key_id)
+  # Supports same options as AuthHMAC.initialize for overriding service_id and
+  # signature method.
+  # 
+  def AuthHMAC.sign!(request, access_key_id, secret, options = nil)
+    credentials = { access_key_id => secret }
+    self.new(credentials, options).sign!(request, access_key_id)
   end
   
-  def AuthHMAC.authenticated?(request, access_key_id, secret)
-    self.new(access_key_id => secret).authenticated?(request)
+  # Authenticates a request using HMAC
+  #
+  # Supports same options as AuthHMAC.initialize for overriding service_id and
+  # signature method.
+  # 
+   def AuthHMAC.authenticated?(request, access_key_id, secret, options)
+    credentials = { access_key_id => secret }
+    self.new(credentials, options).authenticated?(request)
   end
   
   # Signs a request using the access_key_id and the secret associated with that id
