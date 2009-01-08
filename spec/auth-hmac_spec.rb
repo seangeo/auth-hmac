@@ -129,7 +129,8 @@ describe AuthHMAC do
   
   describe "authenticated?" do
     before(:each) do
-      @authhmac = AuthHMAC.new(YAML.load(File.read(File.join(File.dirname(__FILE__), 'fixtures', 'credentials.yml'))))
+      @credentials = YAML.load(File.read(File.join(File.dirname(__FILE__), 'fixtures', 'credentials.yml')))
+      @authhmac = AuthHMAC.new(@credentials)
       @request = Net::HTTP::Get.new("/path/to/get?foo=bar&bar=foo", 'date' => "Thu, 10 Jul 2008 03:29:56 GMT")
     end
     
@@ -166,6 +167,31 @@ describe AuthHMAC do
     it "should return true when the hmac does match" do
       @authhmac.sign!(@request, 'access key 1')
       @authhmac.authenticated?(@request).should be_true
+    end
+
+    describe "custom signatures" do
+      before(:each) do
+        @options = {
+          :service_id => 'MyService',
+          :signature_method => lambda { |r| CustomSignature.new(r) }
+        }
+      end
+
+      it "should return false for invalid service id" do
+        @authhmac.sign!(@request, 'access key 1')
+        AuthHMAC.new(@credentials, @options.except(:signature_method)).authenticated?(@request).should be_false
+      end
+
+      it "should return false for request using default CanonicalString signature" do
+        @authhmac.sign!(@request, 'access key 1')
+        AuthHMAC.new(@credentials, @options.except(:service_id)).authenticated?(@request).should be_false
+      end
+      
+      it "should return true when valid" do
+        @authhmac = AuthHMAC.new(@credentials, @options)
+        @authhmac.sign!(@request, 'access key 1')
+        @authhmac.authenticated?(@request).should be_true
+      end
     end
   end
   
