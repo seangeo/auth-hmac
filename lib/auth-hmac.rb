@@ -138,7 +138,6 @@ class AuthHMAC
   end
   
   def build_signature(request, secret)
-    # canonical_string = CanonicalString.new(request)
     canonical_string = @signature_method.call(request)
     digest = OpenSSL::Digest::Digest.new('sha1')
     Base64.encode64(OpenSSL::HMAC.digest(digest, secret, canonical_string)).strip
