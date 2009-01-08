@@ -42,7 +42,31 @@ class AuthHMAC
   end
   
   include Headers
-  
+
+  # Create an AuthHMAC instance using the given credential store
+  #
+  # Credential Store:
+  # * Credential store must respond to the [] method and return a secret for access key id
+  # 
+  # Options:
+  # Override default options
+  # *  <tt>:service_id</tt> - Service ID used in the AUTHORIZATION header string. Default is AuthHMAC.
+  # *  <tt>:signature_method</tt> - Proc object that takes request and produces the signature string
+  #                                 used for authentication. Default is CanonicalString.
+  # Examples:
+  #   my_hmac = AuthHMAC.new('access_id1' => 'secret1', 'access_id2' => 'secret2')
+  #
+  #   cred_store = { 'access_id1' => 'secret1', 'access_id2' => 'secret2' }
+  #   options = { :service_id => 'MyApp', :signature_method => lambda { |r| MyRequestString.new(r) } }
+  #   my_hmac = AuthHMAC.new(cred_store, options)
+  #   
+  def initialize(credential_store, options = nil)
+    @credential_store = credential_store
+    @service_id = self.class.name
+    @signature_method = lambda { |r| CanonicalString.new(r) }
+    parse_options(options)
+  end
+
   # Signs a request using a given access key id and secret.
   #
   def AuthHMAC.sign!(request, access_key_id, secret)
@@ -53,21 +77,12 @@ class AuthHMAC
     self.new(access_key_id => secret).authenticated?(request)
   end
   
-  # Create an AuthHMAC instance using a given credential store.
-  #
-  # A credential store must respond to the [] method and return
-  # the secret for the access key id passed to [].
-  #
-  def initialize(credential_store)
-    @credential_store = credential_store
-  end
-  
   # Signs a request using the access_key_id and the secret associated with that id
   # in the credential store.
   #
   # Signing a requests adds an Authorization header to the request in the format:
   #
-  #  AuthHMAC <access_key_id>:<signature>
+  #  <service_id> <access_key_id>:<signature>
   #
   # where <signature> is the Base64 encoded HMAC-SHA1 of the CanonicalString and the secret.
   #
@@ -84,7 +99,8 @@ class AuthHMAC
   # in the credential store. Otherwise returns false.
   #
   def authenticated?(request)
-    if md = /^AuthHMAC ([^:]+):(.+)$/.match(find_header(%w(Authorization HTTP_AUTHORIZATION), headers(request)))
+    rx = Regexp.new("#{@service_id} ([^:]+):(.+)$")
+    if md = rx.match(find_header(%w(Authorization HTTP_AUTHORIZATION), headers(request)))
       access_key_id = md[1]
       hmac = md[2]
       secret = @credential_store[access_key_id]      
@@ -95,16 +111,24 @@ class AuthHMAC
   end
   
   private
-    def build_authorization_header(request, access_key_id, secret)
-      "AuthHMAC #{access_key_id}:#{build_signature(request, secret)}"      
+  def parse_options(options)
+    unless options.nil?
+      @service_id = options[:service_id] if options.key?(:service_id)
+      @signature_method = options[:signature_method] if options.key?(:signature_method)
     end
-    
-    def build_signature(request, secret)
-      canonical_string = CanonicalString.new(request)
-      digest = OpenSSL::Digest::Digest.new('sha1')
-      Base64.encode64(OpenSSL::HMAC.digest(digest, secret, canonical_string)).strip
-    end
+  end
+
+  def build_authorization_header(request, access_key_id, secret)
+    "#{@service_id} #{access_key_id}:#{build_signature(request, secret)}"      
+  end
   
+  def build_signature(request, secret)
+    # canonical_string = CanonicalString.new(request)
+    canonical_string = @signature_method.call(request)
+    digest = OpenSSL::Digest::Digest.new('sha1')
+    Base64.encode64(OpenSSL::HMAC.digest(digest, secret, canonical_string)).strip
+  end
+
   # Build a Canonical String for a HTTP request.
   #
   # A Canonical String has the following format:
