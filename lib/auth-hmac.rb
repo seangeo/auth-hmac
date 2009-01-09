@@ -17,6 +17,12 @@ require 'base64'
 # As a result of the generalization, it won't work with AWS because it doesn't support
 # the Amazon extension headers.
 #
+# === References
+# Cryptographic Hash functions:: http://en.wikipedia.org/wiki/Cryptographic_hash_function
+# SHA-1 Hash function::          http://en.wikipedia.org/wiki/SHA-1
+# HMAC algorithm::               http://en.wikipedia.org/wiki/HMAC
+# RFC 2104::                     http://tools.ietf.org/html/rfc2104
+#
 class AuthHMAC
   module Headers # :nodoc:
     # Gets the headers for a request.
@@ -87,7 +93,7 @@ class AuthHMAC
   # Supports same options as AuthHMAC.initialize for overriding service_id and
   # signature method.
   # 
-   def AuthHMAC.authenticated?(request, access_key_id, secret, options)
+  def AuthHMAC.authenticated?(request, access_key_id, secret, options)
     credentials = { access_key_id => secret }
     self.new(credentials, options).authenticated?(request)
   end
@@ -119,10 +125,16 @@ class AuthHMAC
       access_key_id = md[1]
       hmac = md[2]
       secret = @credential_store[access_key_id]      
-      !secret.nil? && hmac == build_signature(request, secret)
+      !secret.nil? && hmac == signature(request, secret)
     else
       false
     end
+  end
+
+  def signature(request, secret)
+    canonical_string = @signature_method.call(request)
+    digest = OpenSSL::Digest::Digest.new('sha1')
+    Base64.encode64(OpenSSL::HMAC.digest(digest, secret, canonical_string)).strip
   end
   
   private
@@ -134,15 +146,9 @@ class AuthHMAC
   end
 
   def build_authorization_header(request, access_key_id, secret)
-    "#{@service_id} #{access_key_id}:#{build_signature(request, secret)}"      
+    "#{@service_id} #{access_key_id}:#{signature(request, secret)}"      
   end
   
-  def build_signature(request, secret)
-    canonical_string = @signature_method.call(request)
-    digest = OpenSSL::Digest::Digest.new('sha1')
-    Base64.encode64(OpenSSL::HMAC.digest(digest, secret, canonical_string)).strip
-  end
-
   # Build a Canonical String for a HTTP request.
   #
   # A Canonical String has the following format:
