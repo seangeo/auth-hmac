@@ -1,0 +1,38 @@
+#!/usr/bin/env ruby
+APP_ROOT = File.expand_path(File.join(File.dirname(__FILE__), '..'))
+
+require 'openssl'
+require 'base64'
+
+def usage
+  puts "Usage: auth-hmac COMMAND [ARGS]"
+  puts "\nCommands:"
+  puts "  signature [secret] [signature string]  Creates HMAC digtest using optional secret"
+  exit
+end
+
+def signature(args)
+  secret = args[0]
+  signature = args[1]
+  digest = OpenSSL::Digest::Digest.new('sha1')
+  puts Base64.encode64(OpenSSL::HMAC.digest(digest, secret, signature)).strip
+end
+
+#
+# MAIN
+# 
+
+usage if ['--help', '-h'].include?(ARGV[0])
+
+command = ARGV.shift
+args = []
+ARGV.each { |arg| args << arg }
+
+usage if command.nil?
+
+case command
+when "signature"
+  signature(args)
+end
+
+

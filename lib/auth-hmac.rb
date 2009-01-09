@@ -78,6 +78,24 @@ class AuthHMAC
     parse_options(options)
   end
 
+  # Generates canonical signing string for given request
+  #
+  # Supports same options as AuthHMAC.initialize for overriding service_id and
+  # signature method.
+  # 
+  def AuthHMAC.canonical_string(request, options = nil)
+    self.new(nil, options).canonical_string(request)
+  end
+
+  # Generates signature string for a given secret
+  #
+  # Supports same options as AuthHMAC.initialize for overriding service_id and
+  # signature method.
+  # 
+  def AuthHMAC.signature(request, secret, options = nil)
+    self.new(nil, options).signature(request, secret)
+  end
+
   # Signs a request using a given access key id and secret.
   #
   # Supports same options as AuthHMAC.initialize for overriding service_id and
@@ -132,9 +150,12 @@ class AuthHMAC
   end
 
   def signature(request, secret)
-    canonical_string = @signature_method.call(request)
     digest = OpenSSL::Digest::Digest.new('sha1')
-    Base64.encode64(OpenSSL::HMAC.digest(digest, secret, canonical_string)).strip
+    Base64.encode64(OpenSSL::HMAC.digest(digest, secret, canonical_string(request))).strip
+  end
+
+  def canonical_string(request)
+    @signature_method.call(request)
   end
   
   private
