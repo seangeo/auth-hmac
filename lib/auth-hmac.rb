@@ -48,8 +48,77 @@ class AuthHMAC
   end
   
   include Headers
-
-  @@default_signature_method = lambda { |r| CanonicalString.new(r) }
+ 
+  # Build a Canonical String for a HTTP request.
+  #
+  # A Canonical String has the following format:
+  #
+  # CanonicalString = HTTP-Verb    + "\n" +
+  #                   Content-Type + "\n" +
+  #                   Content-MD5  + "\n" +
+  #                   Date         + "\n" +
+  #                   request-uri;
+  #
+  #
+  # If the Date header doesn't exist, one will be generated since
+  # Net/HTTP will generate one if it doesn't exist and it will be
+  # used on the server side to do authentication.
+  #
+  class CanonicalString < String # :nodoc:
+    include Headers
+    
+    def initialize(request)
+      self << request_method(request) + "\n"
+      self << header_values(headers(request)) + "\n"
+      self << request_path(request)
+    end
+    
+    private
+      def request_method(request)
+        if request.respond_to?(:request_method) && request.request_method.is_a?(String)
+          request.request_method
+        elsif request.respond_to?(:method) && request.method.is_a?(String)
+          request.method
+        elsif request.respond_to?(:env) && request.env
+          request.env['REQUEST_METHOD']
+        else
+          raise ArgumentError, "Don't know how to get the request method from #{request.inspect}"
+        end
+      end
+      
+      def header_values(headers)
+        [ content_type(headers),
+          content_md5(headers),
+          (date(headers) or headers['Date'] = Time.now.getutc.httpdate)
+        ].join("\n")
+      end
+      
+      def content_type(headers)
+        find_header(%w(CONTENT-TYPE CONTENT_TYPE HTTP_CONTENT_TYPE), headers)
+      end
+      
+      def date(headers)
+        find_header(%w(DATE HTTP_DATE), headers)
+      end
+      
+      def content_md5(headers)
+        find_header(%w(CONTENT-MD5 CONTENT_MD5), headers)
+      end
+      
+      def request_path(request)
+        # Try unparsed_uri in case it is a Webrick request
+        path = if request.respond_to?(:unparsed_uri)
+          request.unparsed_uri
+        else
+          request.path
+        end
+        
+        path[/^[^?]*/]
+      end
+  end
+   
+#  @@default_signature_method = lambda { |r| CanonicalString.new(r) }
+  @@default_signature_class = CanonicalString
 
   # Create an AuthHMAC instance using the given credential store
   #
@@ -73,9 +142,15 @@ class AuthHMAC
 
     # Defaults
     @service_id = self.class.name
-    @signature_method = @@default_signature_method
+    @signature_class = @@default_signature_class
+    #@signature_method = @@default_signature_method
 
-    parse_options(options)
+    unless options.nil?
+      @service_id = options[:service_id] if options.key?(:service_id)
+      @signature_class = options[:signature] if options.key?(:signature) && options[:signature].is_a?(Class)
+    end
+    
+    @signature_method = lambda { |r| @signature_class.send(:new, r) }
   end
 
   # Generates canonical signing string for given request
@@ -158,86 +233,10 @@ class AuthHMAC
     @signature_method.call(request)
   end
   
-  private
-  def parse_options(options)
-    unless options.nil?
-      @service_id = options[:service_id] if options.key?(:service_id)
-      @signature_method = options[:signature_method] if options.key?(:signature_method)
-    end
-  end
-
   def build_authorization_header(request, access_key_id, secret)
     "#{@service_id} #{access_key_id}:#{signature(request, secret)}"      
   end
   
-  # Build a Canonical String for a HTTP request.
-  #
-  # A Canonical String has the following format:
-  #
-  # CanonicalString = HTTP-Verb    + "\n" +
-  #                   Content-Type + "\n" +
-  #                   Content-MD5  + "\n" +
-  #                   Date         + "\n" +
-  #                   request-uri;
-  #
-  #
-  # If the Date header doesn't exist, one will be generated since
-  # Net/HTTP will generate one if it doesn't exist and it will be
-  # used on the server side to do authentication.
-  #
-  class CanonicalString < String # :nodoc:
-    include Headers
-    
-    def initialize(request)
-      self << request_method(request) + "\n"
-      self << header_values(headers(request)) + "\n"
-      self << request_path(request)
-    end
-    
-    private
-      def request_method(request)
-        if request.respond_to?(:request_method) && request.request_method.is_a?(String)
-          request.request_method
-        elsif request.respond_to?(:method) && request.method.is_a?(String)
-          request.method
-        elsif request.respond_to?(:env) && request.env
-          request.env['REQUEST_METHOD']
-        else
-          raise ArgumentError, "Don't know how to get the request method from #{request.inspect}"
-        end
-      end
-      
-      def header_values(headers)
-        [ content_type(headers),
-          content_md5(headers),
-          (date(headers) or headers['Date'] = Time.now.getutc.httpdate)
-        ].join("\n")
-      end
-      
-      def content_type(headers)
-        find_header(%w(CONTENT-TYPE CONTENT_TYPE HTTP_CONTENT_TYPE), headers)
-      end
-      
-      def date(headers)
-        find_header(%w(DATE HTTP_DATE), headers)
-      end
-      
-      def content_md5(headers)
-        find_header(%w(CONTENT-MD5 CONTENT_MD5), headers)
-      end
-      
-      def request_path(request)
-        # Try unparsed_uri in case it is a Webrick request
-        path = if request.respond_to?(:unparsed_uri)
-          request.unparsed_uri
-        else
-          request.path
-        end
-        
-        path[/^[^?]*/]
-      end
-  end
-    
   # Integration with Rails
   #
   class Rails # :nodoc:
@@ -250,12 +249,13 @@ class AuthHMAC
         #   * +failure_message+: The text to use when authentication fails.
         #   * +only+: A list off actions to protect.
         #   * +except+: A list of actions to not protect.
+        #   * +hmac+: Options for HMAC creation. See AuthHMAC#initialize for options.
         #
         def with_auth_hmac(credentials, options = {})
           unless credentials.nil?
             self.credentials = credentials
-            self.authhmac = AuthHMAC.new(self.credentials)
             self.authhmac_failure_message = (options.delete(:failure_message) or "HMAC Authentication failed")
+            self.authhmac = AuthHMAC.new(self.credentials, options.delete(:hmac))
             before_filter(:hmac_login_required, options)
           else
             $stderr << "with_auth_hmac called with nil credentials - authentication will be skipped\n"
@@ -308,6 +308,7 @@ class AuthHMAC
           base.class_inheritable_accessor :hmac_access_id
           base.class_inheritable_accessor :hmac_secret
           base.class_inheritable_accessor :use_hmac
+          base.class_inheritable_accessor :hmac_options
         end
         
         module ClassMethods
@@ -333,7 +334,7 @@ class AuthHMAC
           # patch of the internals of ActiveResource it might not work with past or
           # future versions.
           #
-          def with_auth_hmac(access_id, secret = nil)
+          def with_auth_hmac(access_id, secret = nil, options = nil)
             if access_id.is_a?(Hash)
               self.hmac_access_id = access_id.keys.first
               self.hmac_secret = access_id[self.hmac_access_id]
@@ -342,6 +343,7 @@ class AuthHMAC
               self.hmac_secret = secret
             end
             self.use_hmac = true
+            self.hmac_options = options
             
             class << self
               alias_method_chain :connection, :hmac
@@ -353,6 +355,7 @@ class AuthHMAC
             c.hmac_access_id = self.hmac_access_id
             c.hmac_secret = self.hmac_secret
             c.use_hmac = self.use_hmac
+            c.hmac_options = self.hmac_options
             c
           end          
         end
@@ -365,7 +368,7 @@ class AuthHMAC
         def self.included(base)
           base.send :alias_method_chain, :request, :hmac
           base.class_eval do
-            attr_accessor :hmac_secret, :hmac_access_id, :use_hmac
+            attr_accessor :hmac_secret, :hmac_access_id, :use_hmac, :hmac_options
           end
         end
 
@@ -373,7 +376,7 @@ class AuthHMAC
           if use_hmac && hmac_access_id && hmac_secret
             arguments.last['Date'] = Time.now.httpdate if arguments.last['Date'].nil?
             temp = "Net::HTTP::#{method.to_s.capitalize}".constantize.new(path, arguments.last)
-            AuthHMAC.sign!(temp, hmac_access_id, hmac_secret)
+            AuthHMAC.sign!(temp, hmac_access_id, hmac_secret, hmac_options)
             arguments.last['Authorization'] = temp['Authorization']
           end
           
