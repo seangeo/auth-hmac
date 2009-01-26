@@ -89,7 +89,7 @@ class AuthHMAC
       def header_values(headers)
         [ content_type(headers),
           content_md5(headers),
-          (date(headers) or headers['Date'] = Time.now.getutc.httpdate)
+          (date(headers) or headers['Date'] = Time.now.utc.httpdate)
         ].join("\n")
       end
      
