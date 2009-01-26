@@ -144,7 +144,7 @@ describe AuthHMAC do
       @request = Net::HTTP::Get.new("/path/to/get?foo=bar&bar=foo", 'date' => "Thu, 10 Jul 2008 03:29:56 GMT")
     end
     
-    it "should return false when there is no Authoization Header" do
+    it "should return false when there is no Authorization Header" do
       @authhmac.authenticated?(@request).should be_false
     end
     

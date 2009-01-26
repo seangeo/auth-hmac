@@ -92,7 +92,7 @@ class AuthHMAC
           (date(headers) or headers['Date'] = Time.now.getutc.httpdate)
         ].join("\n")
       end
-      
+     
       def content_type(headers)
         find_header(%w(CONTENT-TYPE CONTENT_TYPE HTTP_CONTENT_TYPE), headers)
       end
@@ -203,7 +203,7 @@ class AuthHMAC
   def sign!(request, access_key_id)
     secret = @credential_store[access_key_id]
     raise ArgumentError, "No secret found for key id '#{access_key_id}'" if secret.nil?
-    request['Authorization'] = build_authorization_header(request, access_key_id, secret)
+    request['Authorization'] = authorization(request, access_key_id, secret)
   end
   
   # Authenticates a request using HMAC
@@ -214,10 +214,10 @@ class AuthHMAC
   #
   def authenticated?(request)
     rx = Regexp.new("#{@service_id} ([^:]+):(.+)$")
-    if md = rx.match(find_header(%w(Authorization HTTP_AUTHORIZATION), headers(request)))
+    if md = rx.match(authorization_header(request))
       access_key_id = md[1]
       hmac = md[2]
-      secret = @credential_store[access_key_id]      
+      secret = @credential_store[access_key_id]
       !secret.nil? && hmac == signature(request, secret)
     else
       false
@@ -233,7 +233,11 @@ class AuthHMAC
     @signature_method.call(request)
   end
   
-  def build_authorization_header(request, access_key_id, secret)
+  def authorization_header(request)
+    find_header(%w(Authorization HTTP_AUTHORIZATION), headers(request))
+  end
+
+  def authorization(request, access_key_id, secret)
     "#{@service_id} #{access_key_id}:#{signature(request, secret)}"      
   end
   
@@ -258,13 +262,13 @@ class AuthHMAC
             self.authhmac = AuthHMAC.new(self.credentials, options.delete(:hmac))
             before_filter(:hmac_login_required, options)
           else
-            $stderr << "with_auth_hmac called with nil credentials - authentication will be skipped\n"
+            $stderr.puts("with_auth_hmac called with nil credentials - authentication will be skipped")
           end
         end
       end
       
       module InstanceMethods # :nodoc:
-        def hmac_login_required          
+        def hmac_login_required
           unless hmac_authenticated?
             response.headers['WWW-Authenticate'] = 'AuthHMAC'
             render :text => self.class.authhmac_failure_message, :status => :unauthorized
