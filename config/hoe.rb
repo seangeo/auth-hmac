@@ -1,6 +1,6 @@
 require 'auth-hmac/version'
 
-AUTHOR = 'Sean Geoghegan'  # can also be an array of Authors
+AUTHOR = ['Sean Geoghegan', 'ascarter']  # can also be an array of Authors
 EMAIL = "seangeo@gmail.com"
 DESCRIPTION = "A gem providing HMAC based authentication for HTTP"
 GEM_NAME = 'auth-hmac' # what ppl will type to install your gem
@@ -51,7 +51,8 @@ end
 # Generate all the Rake tasks
 # Run 'rake -T' to see list of generated tasks (from gem root directory)
 $hoe = Hoe.new(GEM_NAME, VERS) do |p|
-  p.developer(AUTHOR, EMAIL)
+  p.author = AUTHOR
+  p.email = EMAIL
   p.description = DESCRIPTION
   p.summary = DESCRIPTION
   p.url = HOMEPATH

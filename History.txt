@@ -1,3 +1,7 @@
+== 1.1.0 2009-02-26
+
+* Added support for custom request signatures and service ids. (ascarter)
+
 == 1.0.1 2008-08-22
 
 * Fixed nil pointer exception when with_auth called with nil creds.
