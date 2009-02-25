@@ -117,7 +117,6 @@ class AuthHMAC
       end
   end
    
-#  @@default_signature_method = lambda { |r| CanonicalString.new(r) }
   @@default_signature_class = CanonicalString
 
   # Create an AuthHMAC instance using the given credential store
@@ -143,7 +142,6 @@ class AuthHMAC
     # Defaults
     @service_id = self.class.name
     @signature_class = @@default_signature_class
-    #@signature_method = @@default_signature_method
 
     unless options.nil?
       @service_id = options[:service_id] if options.key?(:service_id)
