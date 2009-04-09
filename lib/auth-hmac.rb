@@ -31,10 +31,10 @@ class AuthHMAC
     # Currently handles net/http and Rails.
     #
     def headers(request)
-      if request.respond_to?(:[])
-        request
-      elsif request.respond_to?(:headers)
+      if request.respond_to?(:headers)
         request.headers
+      elsif request.respond_to?(:[])
+        request
       else
         raise ArgumentError, "Don't know how to get the headers from #{request.inspect}"
       end
